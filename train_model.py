@@ -1,7 +1,11 @@
+import os.path
+
 from torch import nn, optim
+from torch.optim import optimizer
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms, datasets
+from vit import VIT
 import torch
 
 
@@ -69,9 +73,10 @@ def train(cfg, model_name = "dswin"):
 
     device = torch.device("mps")
 
+    model = None
     # create model
     if model_name == "vit":
-        model = Vit()
+        model = VIT()
 
     model = model.to(device)
 
@@ -81,7 +86,7 @@ def train(cfg, model_name = "dswin"):
 
     # load training parameters
     writer = SummaryWriter()
-    training_lost = []
+    training_loss = []
 
     initial_lr = cfg['initial_lr']
     num_epochs = cfg['num_epochs']
@@ -93,6 +98,84 @@ def train(cfg, model_name = "dswin"):
 
     optimizer_name = cfg['optimizer']
     optimizer = optim.Adam(model.parameters(),lr = initial_lr)
+
+    """
+    log_filename = ""
+    log_dir = './log'
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    """
+
+    num_epochs = 5
+
+    # train
+    for epoch in range(num_epochs+1):
+        running_loss = 0
+        acc, correct,tot =0,0,0
+        optimizer.zero_grad()
+
+
+        for i, (data, label) in enumerate(train_loader):
+
+            cur_acc, cur_correct, cur_tot = 0,0,0
+
+            data,label = data.to(device, dtype = torch.float), label.to(device,dtype = torch.long)
+            outs = model(data)
+            loss = criterion(outs, label)
+            loss.backward()
+            running_loss += loss.item()
+
+            optimizer.step()
+            _,pred = torch.max(outs, 1) # pick the max, as col dim 1
+
+            cur_tot += label.size(0)    # process images in one batch
+            cur_correct += (pred == label).sum().item()
+
+            print(cur_correct)
+
+            cur_acc = cur_correct * 100/ cur_tot
+
+            correct += cur_correct
+            tot += cur_tot
+
+        running_loss /= len(train_loader)
+        acc = correct *100.0 /tot
+
+        training_loss.append(running_loss)
+
+    print(acc, correct,tot)
+
+
+
+
+
+
+
+import matplotlib.pyplot as plt
+
+def visualize_images_and_labels(dataset, num_images=5):
+    class_names = dataset.classes
+
+    for i in range(num_images):
+        image, label = dataset[i]
+        # Convert image tensor back to PIL image and display it
+        img = transforms.ToPILImage()(image).convert("RGB")
+        plt.imshow(img)
+        plt.title(f"Label: {class_names[label]} ({label})")
+        plt.show()
+
+
+
+
+
+
+
+if __name__  == "__main__":
+    cfg = get_cfg()
+
+
+    train(cfg,"vit")
+
 
 
 
